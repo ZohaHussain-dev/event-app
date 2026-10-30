@@ -1,7 +1,7 @@
 pipeline {
-    agent any            // Jenkins node must be the server that has docker, kubectl and minikube
+    agent any
 
-    triggers { githubPush() }   // GitHub webhook -> auto build
+    triggers { githubPush() }
 
     environment {
         TAG = "${env.BUILD_NUMBER}"
@@ -15,8 +15,10 @@ pipeline {
 
         stage('Build Docker Images') {
             steps {
-                sh 'docker build -t event-backend:${TAG}  ./backend'
-                sh 'docker build -t event-frontend:${TAG} ./frontend'
+                dir('event-app') {
+                    sh 'docker build -t event-backend:${TAG}  ./backend'
+                    sh 'docker build -t event-frontend:${TAG} ./frontend'
+                }
             }
         }
 
@@ -29,13 +31,15 @@ pipeline {
 
         stage('Deploy to Kubernetes') {
             steps {
-                sh '''
-                  sed -i "s|IMAGE_TAG|${TAG}|g" k8s/02-backend.yaml k8s/03-frontend.yaml
-                  kubectl apply -f k8s/00-namespace.yaml
-                  kubectl apply -f k8s/01-database.yaml
-                  kubectl apply -f k8s/02-backend.yaml
-                  kubectl apply -f k8s/03-frontend.yaml
-                '''
+                dir('event-app') {
+                    sh '''
+                      sed -i "s|IMAGE_TAG|${TAG}|g" k8s/02-backend.yaml k8s/03-frontend.yaml
+                      kubectl apply -f k8s/00-namespace.yaml
+                      kubectl apply -f k8s/01-database.yaml
+                      kubectl apply -f k8s/02-backend.yaml
+                      kubectl apply -f k8s/03-frontend.yaml
+                    '''
+                }
             }
         }
 
