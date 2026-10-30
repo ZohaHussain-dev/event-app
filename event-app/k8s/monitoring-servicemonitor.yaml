@@ -1,0 +1,16 @@
+# Apply AFTER installing kube-prometheus-stack (Task 3, step 3).
+# NOT applied by the Jenkinsfile, so the pipeline works before monitoring exists.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: backend-monitor
+  namespace: event-app
+  labels:
+    release: monitoring
+spec:
+  selector:
+    matchLabels: {app: backend}
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s

@@ -1,0 +1,58 @@
+pipeline {
+    agent any            // Jenkins node must be the server that has docker, kubectl and minikube
+
+    triggers { githubPush() }   // GitHub webhook -> auto build
+
+    environment {
+        TAG = "${env.BUILD_NUMBER}"
+        NS  = "event-app"
+    }
+
+    stages {
+        stage('Checkout') {
+            steps { checkout scm }
+        }
+
+        stage('Build Docker Images') {
+            steps {
+                sh 'docker build -t event-backend:${TAG}  ./backend'
+                sh 'docker build -t event-frontend:${TAG} ./frontend'
+            }
+        }
+
+        stage('Load Images into Minikube') {
+            steps {
+                sh 'minikube image load event-backend:${TAG}'
+                sh 'minikube image load event-frontend:${TAG}'
+            }
+        }
+
+        stage('Deploy to Kubernetes') {
+            steps {
+                sh '''
+                  sed -i "s|IMAGE_TAG|${TAG}|g" k8s/02-backend.yaml k8s/03-frontend.yaml
+                  kubectl apply -f k8s/00-namespace.yaml
+                  kubectl apply -f k8s/01-database.yaml
+                  kubectl apply -f k8s/02-backend.yaml
+                  kubectl apply -f k8s/03-frontend.yaml
+                '''
+            }
+        }
+
+        stage('Verify Rollout') {
+            steps {
+                sh '''
+                  kubectl -n ${NS} rollout status deployment/postgres --timeout=120s
+                  kubectl -n ${NS} rollout status deployment/backend  --timeout=120s
+                  kubectl -n ${NS} rollout status deployment/frontend --timeout=120s
+                  kubectl -n ${NS} get pods
+                '''
+            }
+        }
+    }
+
+    post {
+        success { echo 'Deployment successful' }
+        failure { echo 'Deployment failed - check console output' }
+    }
+}
